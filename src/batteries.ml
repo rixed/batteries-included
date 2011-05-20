@@ -1,5 +1,7 @@
 (* open this to extend all Foo with BatFoo *)
 
+let () = ()
+
 module Legacy = struct
   include Pervasives
   module Arg = Arg

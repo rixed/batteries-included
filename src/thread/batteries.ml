@@ -1,5 +1,89 @@
 (* open this to extend all Foo with BatFoo *)
 
+(* Set up the locks needed to safely use functions in a multi-threaded
+   environment *)
+let () = 
+  let module BaseRMutex = struct
+    module Thread = struct 
+      type t
+      external self : unit -> t = "thread_self"
+      external id : t -> int = "thread_id"
+    end
+    module Mutex = struct 
+      type t
+      external create: unit -> t = "caml_mutex_new"
+      external lock: t -> unit = "caml_mutex_lock"
+      external try_lock: t -> bool = "caml_mutex_try_lock"
+      external unlock: t -> unit = "caml_mutex_unlock"
+    end
+    type owner = { thread : int; mutable depth : int }
+    
+    type t = {
+	  primitive : Mutex.t; 
+	  wait      : Mutex.t;
+	  mutable ownership : owner option;
+	}
+      
+      
+    let create () = {
+	primitive = Mutex.create ();
+	wait      = Mutex.create ();
+	ownership = None
+      }
+    
+    (** Attempt to acquire the mutex.
+	
+	@param hurry If true, in case the mutex cannot be acquired
+	yet, just return [false], without waiting. Otherwise,
+	wait.  *)
+    let lock_either hurry m = (*Stuff shared by [lock] and [try_lock]*)
+      let id = Thread.id (Thread.self ()) in
+      let rec aux () =
+	let wait = ref false in
+	Mutex.lock m.primitive;     (******Critical section begins*)
+	(match m.ownership with
+	  | None                     -> (*Lock belongs to nobody, I can take it.      *)
+	    m.ownership <- Some {thread = id; depth = 1};
+	  | Some s when s.thread = id -> (*Lock already belongs to me, I can keep it.  *)
+	    s.depth <- s.depth + 1
+	  | _                        -> (*Lock belongs to someone else. I should wait.*)
+	    wait := true);
+	Mutex.unlock m.primitive;  (******Critical section ends*)
+	if !wait then
+	  if hurry then false
+	  else
+	    begin
+	      Mutex.lock m.wait;        (*Get in line and try again*)
+	      aux ()
+	    end
+	else true
+      in aux()
+       
+    let lock     m = ignore (lock_either false m)
+    let try_lock m = lock_either true m
+  
+    let unlock m = 
+      let id = Thread.id (Thread.self ()) in
+      Mutex.lock m.primitive;     (******Critical section begins*)
+      (match m.ownership with
+	| Some s ->
+	  assert (s.thread = id); (*If I'm not the owner, we have a consistency issue.*)
+	  if s.depth > 1 then s.depth <- s.depth - 1 (*release one depth but we're still the owner*)
+	  else		
+	    begin
+	      m.ownership <- None;  (*release once and for all*)
+	      Mutex.unlock m.wait   (*wake up waiting threads *)
+	    end
+	| _ -> assert false);
+      Mutex.unlock m.primitive   (******Critical section ends  *)	
+  end in
+  let module BatRMutex = BatConcurrent.MakeLock(BaseRMutex) in
+  BatUnix.lock := BatRMutex.make ();
+  BatIO.lock := BatRMutex.make ();
+  BatIO.lock_factory := BatRMutex.make;
+  BatPervasives.lock := BatRMutex.make ()
+
+(* Keep the old versions of modules around if needed *)
 module Legacy = struct
   include Pervasives
   module Arg = Arg
@@ -43,7 +127,7 @@ module Legacy = struct
   module Weak = Weak
 end
 
-(* stdlib modules *)
+(* stdlib extension modules *)
 module Arg = struct include Arg include BatArg end
 module Array = struct include Array include BatArray end
 (* ArrayLabels *)
@@ -157,9 +241,4 @@ module Vect = BatVect
 
 (* Pervasives *)
 include Pervasives
-include BatPervasives;;
-
-BatUnix.lock := BatRMutex.make ();;
-BatIO.lock := BatRMutex.make ();;
-BatIO.lock_factory := BatRMutex.make;;
-BatPervasives.lock := BatRMutex.make ();;
+include BatPervasives

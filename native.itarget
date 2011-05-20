@@ -1,2 +1,2 @@
-src/batteries_mt.cmxa
+src/thread/batteries_mt.cmxa
 src/batteries.cmxa

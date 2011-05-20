@@ -26,13 +26,17 @@ else
   BATTERIES_NATIVE_SHLIB ?= $(BATTERIES_NATIVE)
 endif
 
-INSTALL_FILES = _build/META _build/src/*.cma \
-	battop.ml _build/src/*.cmi _build/src/*.mli \
+INSTALL_FILES = _build/META battop.ml \
+	_build/src/*.cma \
+	_build/src/*.cmi _build/src/*.mli \
+	_build/src/thread/*.cma \
+	_build/src/thread/*.cmi _build/src/thread/*.mli \
 	_build/src/batteries_help.cmo \
 	_build/src/syntax/pa_comprehension/pa_comprehension.cmo \
 	_build/src/syntax/pa_strings/pa_strings.cma \
 	_build/src/syntax/pa_llist/pa_llist.cmo
-NATIVE_INSTALL_FILES = _build/src/*.cmx _build/src/*.a _build/src/*.cmxa
+NATIVE_INSTALL_FILES = _build/src/*.cmx _build/src/*.a _build/src/*.cmxa \
+	_build/src/thread/*.cmx _build/src/thread/*.a _build/src/thread/*.cmxa
 
 # What to build
 TARGETS = syntax.otarget byte.otarget src/batteries_help.cmo META
@@ -64,7 +68,7 @@ all: src/batCamomile.ml
 	$(OCAMLBUILD) $(TARGETS)
 
 clean:
-	${RM} apidocs
+	${RM} apidocs build/META
 	${RM} qtest/*_t.ml qtest/test_mods.mllib
 	${RM} src/batCamomile.ml
 	$(OCAMLBUILD) -clean

@@ -157,4 +157,9 @@ module Vect = BatVect
 
 (* Pervasives *)
 include Pervasives
-include BatPervasives
+include BatPervasives;;
+
+BatUnix.lock := BatRMutex.make ();;
+BatIO.lock := BatRMutex.make ();;
+BatIO.lock_factory := BatRMutex.make;;
+BatPervasives.lock := BatRMutex.make ();;

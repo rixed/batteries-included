@@ -224,7 +224,12 @@ let bench ?(env=get_environment ()) f =
   let (test_time, test_iters, _) = run_for_time min_time 1 f in
   printf "Ran %d iterations in %a\n%!" test_iters print_time test_time;
   let iters = ceil (min_time *. float test_iters /. test_time) in
-  
+  let est_time = float config.samples *. float iters *. test_time /. float test_iters in
+  printf "Collecting %d samples, %d iterations each, estimated time: %a\n%!"
+    config.samples iters est_time;
+  Array.init config.samples (fun _ -> 
+    if config.gc_between_tests then Gc.compact; 
+    time_ (f iters)) |> Array.map (fun t -> t /. iters -. env.clock_cost)
 
 let () = 
   let env = get_timer_granularity () in
@@ -232,5 +237,5 @@ let () =
     print_time env.clock_res
     print_time env.clock_cost;
   let rec f = function 0 -> 1 | n -> n * f (n-1) in
-  bench ~env [f, 100; f 20]
+  bench ~env [f, 100; f, 20]
 

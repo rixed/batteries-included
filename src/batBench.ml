@@ -175,8 +175,6 @@ let outlier_variance mu sigma n =
   let var_out_min = minby var_out 1 (minby cmax 0. (ua /. 2.)) in
   var_out_min, effect_of_var var_out_min
 
-  
-
 type environment = {clock_res: float; clock_cost: float}
 
 let is_positive x = x > 0.
@@ -215,24 +213,29 @@ type config = {
   mutable gc_between_tests: bool; 
 }
 
-let config = { samples=100; resamples = 100_000; gc_between_tests: false }
+let config = { samples=100; resamples = 100_000; gc_between_tests= false }
 
-let bench ?(env=get_environment ()) f =
+let time_f ?(env=get_environment ()) (f: int -> 'a) =
   let tclock i = time_ (repeat i timer) () in
   run_for_time 0.1 tclock 10_000 |> ignore;
   let min_time = min (env.clock_res *. 1_000.) 0.1 in
-  let (test_time, test_iters, _) = run_for_time min_time 1 f in
+  let (test_time, test_iters, _) = run_for_time min_time f 1 in
   printf "Ran %d iterations in %a\n%!" test_iters print_time test_time;
   let iters = ceil (min_time *. float test_iters /. test_time) in
-  let est_time = float config.samples *. float iters *. test_time /. float test_iters in
+  let iters_int = int_of_float iters in
+  let est_time = float config.samples *. iters *. test_time /. float test_iters in
   printf "Collecting %d samples, %d iterations each, estimated time: %a\n%!"
-    config.samples iters est_time;
+    config.samples iters_int print_time est_time;
   Array.init config.samples (fun _ -> 
-    if config.gc_between_tests then Gc.compact; 
-    time_ (f iters)) |> Array.map (fun t -> t /. iters -. env.clock_cost)
+    if config.gc_between_tests then Gc.compact (); 
+    time_ f iters_int) |> Array.map (fun t -> t /. iters -. env.clock_cost)
+
+let gen_bench (f, x) = fun i -> repeat i f x
+
+let bench ?env fs = List.map (fun bf -> time_f ?env (gen_bench bf)) fs
 
 let () = 
-  let env = get_timer_granularity () in
+  let env = get_environment () in
   printf "Clock Res: %a\nClock cost: %a\n" 
     print_time env.clock_res
     print_time env.clock_cost;

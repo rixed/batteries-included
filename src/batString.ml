@@ -666,8 +666,9 @@ let nreplace ~str ~sub ~by =
    in
    loop 0
 (*$T nreplace
-   nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo afoo bar"
+   nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo fooa bar"
    nreplace ~str:"bar foo bar" ~sub:"bar" ~by:"foo" = "foo foo foo"
+   nreplace ~str:"aaaaaa" ~sub:"aa" ~by:"aaa" = "aaaaaaaaa"
 *)
 
 

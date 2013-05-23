@@ -585,10 +585,10 @@ val replace : str:string -> sub:string -> by:string -> bool * string
 
 val nreplace : str:string -> sub:string -> by:string -> string
 (** [nreplace ~str ~sub ~by] returns a string obtained by iteratively
-    replacing each occurrence of [sub] by [by] in [str], from right to left.
+    replacing each occurrence of [sub] by [by] in [str], from left to right.
     It returns a copy of [str] if [sub] has no occurrence in [str].
 
-    Example: [nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo afoo bar"]
+    Example: [nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo fooa bar"]
 *)
 
 val repeat: string -> int -> string

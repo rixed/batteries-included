@@ -626,12 +626,18 @@ let replace_chars f s =
 *)
 
 let replace ~str ~sub ~by =
-  try
-    let i = find str sub in
-    (true, (slice ~last:i str) ^ by ^
-           (slice ~first:(i + String.length sub) str))
-  with
-    Not_found -> (false, String.copy str)
+   try
+     let subpos = find str sub in
+     let strlen = length str in
+     let sublen = length sub in
+     let bylen  = length by in
+     let newstr = create (strlen - sublen + bylen) in
+     blit str 0 newstr 0 subpos ;
+     blit by 0 newstr subpos bylen ;
+     blit str (subpos + sublen) newstr (subpos + bylen) (strlen - subpos - sublen) ;
+     (true, newstr)
+   with Not_found ->  (* find failed *)
+     (false, str)
 (*$T replace
    replace ~str:"foobarbaz" ~sub:"bar" ~by:"rab" = (true, "foorabbaz")
    replace ~str:"foo" ~sub:"bar" ~by:"" = (false, "foo")
@@ -639,8 +645,26 @@ let replace ~str ~sub ~by =
 
 
 let nreplace ~str ~sub ~by =
-  let parts = nsplit str ~by:sub in
-  String.concat by parts
+   if sub = "" then invalid_arg "nreplace: cannot replace all empty substrings" ;
+   let find_sub pos = try find_from str pos sub with Not_found -> -1 in  
+   (* allows loop to be tail recursive *)
+   let sublen = length sub in
+   let strlen = length str in
+   let buffer = Buffer.create strlen in
+   let rec loop curpos =
+     if curpos = strlen then
+       Buffer.contents buffer
+     else
+       let subpos = find_sub curpos in
+       if subpos = -1 then
+         ( Buffer.add_substring buffer str curpos (strlen - curpos) ;
+           Buffer.contents buffer )
+       else
+         ( Buffer.add_substring buffer str curpos (subpos - curpos) ;
+           Buffer.add_string buffer by ;
+           loop (subpos + sublen) )
+   in
+   loop 0
 (*$T nreplace
    nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo afoo bar"
    nreplace ~str:"bar foo bar" ~sub:"bar" ~by:"foo" = "foo foo foo"

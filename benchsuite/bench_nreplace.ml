@@ -307,12 +307,36 @@ let do_bench_for_len mult name =
     "thelema2 "^ name, run nreplace_thelema2 ;
     "madroach "^ name, run nreplace_madroach ;
     "gasche simple "^ name, run nreplace_substring_simple ;
-    "gasche enum "^ name, run nreplace_substring_enum ;
+    (*"gasche enum "^ name, run nreplace_substring_enum ;*)
     "gasche optimized "^ name, run nreplace_substring_optimized ;
   ] mult |>
   Bench.run_outputs
 
 let main =
+    (* First check that all implementation performs superficialy the same *)
+    let check ~str ~sub ~by =
+        let outp = nreplace_orig ~str ~sub ~by in
+        List.iter (fun (d,rep) ->
+            let outp' = rep ~str ~sub ~by in
+            if outp' <> outp then (
+                Printf.fprintf stderr "Implementation %s failed for str:%S, sub:%S, by:%S got %S instead of %S\n"
+                    d str sub by outp' outp ;
+                exit 1
+            )) [
+            "glyn", nreplace_glyn ;
+            "rxd", nreplace_rxd ;
+            "thelema", nreplace_thelema ;
+            "thelema2", nreplace_thelema2 ;
+            "madroach", nreplace_madroach ;
+            "gasche simple", nreplace_substring_simple ;
+            (*"gasche enum", nreplace_substring_enum ;*)
+            "gasche optimz", nreplace_substring_optimized
+        ] in
+    check ~str:"foo bar baz" ~sub:"bar" ~by:"BAR" ;
+    check ~str:"foo bar baz" ~sub:"bar" ~by:"" ;
+    check ~str:"foo bar baz" ~sub:"a" ~by:"BAR" ;
+    check ~str:"foo bar baz" ~sub:" " ~by:"   " ;
+
     do_bench_for_len 1 "short" ;
     do_bench_for_len 10 "long" ;
     do_bench_for_len 100 "very long"

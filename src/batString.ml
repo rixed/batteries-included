@@ -625,53 +625,6 @@ let replace_chars f s =
    replace_chars (fun _ -> assert false) "" = ""
 *)
 
-let replace ~str ~sub ~by =
-   try
-     let subpos = find str sub in
-     let strlen = length str in
-     let sublen = length sub in
-     let bylen  = length by in
-     let newstr = create (strlen - sublen + bylen) in
-     blit str 0 newstr 0 subpos ;
-     blit by 0 newstr subpos bylen ;
-     blit str (subpos + sublen) newstr (subpos + bylen) (strlen - subpos - sublen) ;
-     (true, newstr)
-   with Not_found ->  (* find failed *)
-     (false, str)
-(*$T replace
-   replace ~str:"foobarbaz" ~sub:"bar" ~by:"rab" = (true, "foorabbaz")
-   replace ~str:"foo" ~sub:"bar" ~by:"" = (false, "foo")
-*)
-
-
-let nreplace ~str ~sub ~by =
-   if sub = "" then invalid_arg "nreplace: cannot replace all empty substrings" ;
-   let find_sub pos = try find_from str pos sub with Not_found -> -1 in  
-   (* allows loop to be tail recursive *)
-   let sublen = length sub in
-   let strlen = length str in
-   let buffer = Buffer.create strlen in
-   let rec loop curpos =
-     if curpos = strlen then
-       Buffer.contents buffer
-     else
-       let subpos = find_sub curpos in
-       if subpos = -1 then
-         ( Buffer.add_substring buffer str curpos (strlen - curpos) ;
-           Buffer.contents buffer )
-       else
-         ( Buffer.add_substring buffer str curpos (subpos - curpos) ;
-           Buffer.add_string buffer by ;
-           loop (subpos + sublen) )
-   in
-   loop 0
-(*$T nreplace
-   nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo fooa bar"
-   nreplace ~str:"bar foo bar" ~sub:"bar" ~by:"foo" = "foo foo foo"
-   nreplace ~str:"aaaaaa" ~sub:"aa" ~by:"aaa" = "aaaaaaaaa"
-*)
-
-
 let in_place_mirror s =
   let len = String.length s in
   if len > 0 then for k = 0 to (len - 1)/2 do
@@ -878,6 +831,64 @@ struct
     Exceptionless.rsplit "a" ~by:"e" = None
   *)
 end (* String.Exceptionless *)
+
+let replace ~str ~sub ~by =
+   try
+     let subpos = find str sub in
+     let strlen = length str in
+     let sublen = length sub in
+     let bylen  = length by in
+     let newstr = create (strlen - sublen + bylen) in
+     blit str 0 newstr 0 subpos ;
+     blit by 0 newstr subpos bylen ;
+     blit str (subpos + sublen) newstr (subpos + bylen) (strlen - subpos - sublen) ;
+     (true, newstr)
+   with Not_found ->  (* find failed *)
+     (false, str)
+(*$T replace
+   replace ~str:"foobarbaz" ~sub:"bar" ~by:"rab" = (true, "foorabbaz")
+   replace ~str:"foo" ~sub:"bar" ~by:"" = (false, "foo")
+*)
+
+
+let nreplace ~str ~sub ~by =
+  let strlen = length str in
+  let sublen = length sub in
+  let bylen  = length by in
+  let dlen   = bylen - sublen in
+  let rec loop_subst l i =
+    match Exceptionless.rfind_from str (i-1) sub with
+    | None -> l
+    | Some i' -> loop_subst (l + dlen) i' in
+  let newlen =
+    if dlen = 0 then strlen else loop_subst strlen strlen in
+  let newstr = create newlen in
+  let rec loop_copy i j =
+    match Exceptionless.rfind_from str (i-1) sub with
+    | None ->
+      (* still need the first chunk *)
+      assert (i = j) ;
+      blit str 0 newstr 0 i
+    | Some i' ->
+      let j' = j - (i - i') - dlen in
+      (* newstring.[j .. end] is already inited. Init from j' to (j-1). *)
+      blit by 0 newstr j' bylen ;
+      blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
+      loop_copy i' j' in
+  loop_copy strlen newlen ;
+  newstr
+
+(*$T nreplace
+   nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo afoo bar"
+   nreplace ~str:"bar foo bar" ~sub:"bar" ~by:"foo" = "foo foo foo"
+   nreplace ~str:"aaaaaa" ~sub:"aa" ~by:"aaa" = "aaaaaaaaa"
+   nreplace ~str:"" ~sub:"aa" ~by:"bb" = ""
+   nreplace ~str:"foo bar baz" ~sub:"foo bar baz" ~by:"" = ""
+   nreplace ~str:"abc" ~sub:"abc" ~by:"def" = "def"
+   let s1 = "foo" in let s2 = nreplace ~str:s1 ~sub:"X" ~by:"X" in set s2 0 'F' ; s1.[0] = 'f' 
+*)
+
+
 
 module Cap =
 struct

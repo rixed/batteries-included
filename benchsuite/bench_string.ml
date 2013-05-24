@@ -79,6 +79,19 @@ let nsplit str pat =
   in
   List.rev (loop 0 [])
 
+(* should be BatSubstring.nsplit_enum *)
+let nsplit_enum str pat =
+  let pat_len = String.length pat in
+  let pos = ref 0 in
+  BatEnum.from (fun () ->
+    try
+      let next_pos = BatString.find_from str !pos pat in
+      let sub = BatSubstring.unsafe_substring str !pos (next_pos - !pos) in
+      pos := next_pos + pat_len;
+      sub
+    with Not_found -> raise BatEnum.No_more_elements
+  )
+
 (* should be BatSubstring.concat, with a separator argument *)
 let concat_optimized ~sep ssl =
   let sep_len = String.length sep in
@@ -133,11 +146,49 @@ let concat_simple ~sep ssl =
       List.iter write tl;
       item
 
+(* should be BatSubstring.concat, with a separator argument *)
+let concat_simple ~sep ssl =  
+  let sep_len = String.length sep in
+  (* see comment above about Obj.magic *)
+  let ssl : (string * int * int) list = Obj.magic (ssl : BatSubstring.t list) in
+  match ssl with
+    | [] -> ""
+    | (s,o,len)::tl ->
+      let total_len = List.fold_left (fun acc (_,_,l) -> acc+sep_len+l) len tl in
+      let item = String.create total_len in
+      String.unsafe_blit s o item 0 len;
+      let pos = ref len in
+      let write (s,o,len) =
+        String.unsafe_blit sep 0 item !pos sep_len;
+        pos := !pos + sep_len;
+        String.unsafe_blit s o item !pos len;
+        pos := !pos + len;
+      in
+      List.iter write tl;
+      item
+
+let concat_enum ~sep enum =
+  match BatEnum.get enum with
+    | None -> ""
+    | Some hd ->
+      let buf = Buffer.create 100 in
+      Buffer.add_string buf (BatSubstring.to_string hd);
+      BatEnum.iter (fun substr ->
+        (* see comment above about Obj.magic *)
+        let (s,o,l) = (Obj.magic (substr : BatSubstring.t) : string * int * int) in
+        Buffer.add_string buf sep;
+        Buffer.add_substring buf s o l;
+      ) enum;
+      Buffer.contents buf
+
 let nreplace_substring_simple ~str ~sub ~by =
   concat_simple ~sep:by (nsplit str sub)
 
 let nreplace_substring_optimized ~str ~sub ~by =
   concat_optimized ~sep:by (nsplit str sub)
+
+let nreplace_substring_enum ~str ~sub ~by =
+  concat_enum ~sep:by (nsplit_enum str sub)
 
 let nreplace_optimized ~str ~sub ~by =
   if sub = "" then invalid_arg "nreplace: cannot replace all empty substrings" ;
@@ -179,6 +230,7 @@ let nreplace_bench name input_string =
     name ^ ":string simple", test_nreplace nreplace_string_simple;
     name ^ ":substring simple", test_nreplace nreplace_substring_simple;
     name ^ ":substring optimized", test_nreplace nreplace_substring_optimized;
+    name ^ ":substring enum", test_nreplace nreplace_substring_enum;
     name ^ ":optimized", test_nreplace nreplace_optimized;
   ]
 
@@ -201,14 +253,16 @@ replace:long_string:optimized (23.90 us) is probably (alpha=6.40%) same speed as
 replace:long_string:substring simple (24.44 us) which is 67.6% faster than
 replace:long_string:string simple (75.33 us)
 
-nreplace:short_string:substring optimized (234.95 ns) is 4.6% faster than
-nreplace:short_string:substring simple (246.23 ns) which is 21.4% faster than
-nreplace:short_string:string simple (313.30 ns) which is 2.3% faster than
-nreplace:short_string:optimized (320.67 ns)
+nreplace:short_string:substring optimized (243.56 ns) is 3.8% faster than
+nreplace:short_string:substring simple (253.09 ns) which is 22.0% faster than
+nreplace:short_string:string simple (324.45 ns) which is 1.2% faster than
+nreplace:short_string:optimized (328.33 ns) which is 9.7% faster than
+nreplace:short_string:substring enum (363.77 ns)
 
-nreplace:long_string:optimized (2.06 ms) is 48.3% faster than
-nreplace:long_string:string simple (3.97 ms) which is 14.1% faster than
-nreplace:long_string:substring optimized (4.62 ms) which is probably (alpha=22.68%) same speed as
-nreplace:long_string:substring simple (4.67 ms)
+nreplace:long_string:optimized (2.08 ms) is 10.9% faster than
+nreplace:long_string:substring enum (2.34 ms) which is 45.7% faster than
+nreplace:long_string:string simple (4.30 ms) which is 11.0% faster than
+nreplace:long_string:substring optimized (4.84 ms) which is probably (alpha=21.55%) same speed as
+nreplace:long_string:substring simple (4.89 ms)
 
 *)

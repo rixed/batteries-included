@@ -99,9 +99,9 @@ let nreplace_thelema2 ~str ~sub ~by =
   let bylen = length by in
   let dlen = bylen - sublen in
   let rec loop_subst idxes newlen i =
-    match Exceptionless.rfind_from str (i-1) sub with
-    | None -> idxes, newlen
-    | Some i' -> loop_subst (i'::idxes) (newlen+dlen) i' in
+    match (try rfind_from str (i-1) sub with Not_found -> -1) with
+    | -1 -> idxes, newlen
+    | i' -> loop_subst (i'::idxes) (newlen+dlen) i' in
   let idxes, newlen = loop_subst [] strlen strlen in
   let newstr = create newlen in
   let rec loop_copy i j idxes =

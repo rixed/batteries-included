@@ -214,6 +214,50 @@ let nreplace_optimized ~str ~sub ~by =
    in
    loop 0
 
+let nreplace_recipe ~str ~sub ~by =
+  let strlen = String.length str
+  and sublen = String.length sub
+  and bylen  = String.length by in
+
+  (* compare to sub at position i in str *)
+  let compare i =
+    let rec compare' j =
+      if j >= sublen then true
+      else if i+j >= strlen || str.[i+j] <> sub.[j] then false
+      else compare' (j+1)
+    in
+    compare' 0
+  in
+  (* collect all positions where we need to replace *)
+  if sublen = 0 then invalid_arg "nreplace: empty sub not allowed";
+  let rec collect todo i =
+    if i >= strlen then todo
+    else if compare i
+    then collect (i::todo) (i+sublen)
+    else collect todo (i+1)
+  in
+  let todo = collect [] 0 in
+
+  (* create destination string *)
+  let dst = String.create (strlen + List.length todo * (bylen - sublen)) in
+
+  (* do the replacement *)
+  let srci, dsti =
+    (* todo is in reverse order, therefore fold right. *)
+    List.fold_right
+      begin fun i (srci,dsti) ->
+        let skiplen = i-srci in
+        String.unsafe_blit str srci dst dsti skiplen;
+        String.unsafe_blit by 0 dst (dsti+skiplen) bylen;
+        (srci+skiplen+sublen, dsti+skiplen+bylen)
+      end
+      todo
+      (0,0)
+  in
+  assert (strlen - srci = String.length dst - dsti);
+  String.unsafe_blit str srci dst dsti (strlen - srci);
+  dst
+
 let pattern = "aa"
 let replace = "foo"
 
@@ -232,6 +276,7 @@ let nreplace_bench name input_string =
     name ^ ":substring optimized", test_nreplace nreplace_substring_optimized;
     name ^ ":substring enum", test_nreplace nreplace_substring_enum;
     name ^ ":optimized", test_nreplace nreplace_optimized;
+    name ^ ":recipe", test_nreplace nreplace_optimized;
   ]
 
 let () =

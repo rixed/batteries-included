@@ -99,7 +99,9 @@ let pattern = "aa"
 let replace = "foo"
 
 let short_string = "bar aaa bar"
-let long_string = String.concat " " [String.make 5_000 'b'; "aaa"; String.make 5_000 'c']
+let long_string =
+  let monomer = BatString.make 50 'b' ^ "aaa" ^ BatString.make 50 'c' in
+  BatString.concat " " (BatList.make 50 monomer)
 
 
 let replace_bench name input_string =

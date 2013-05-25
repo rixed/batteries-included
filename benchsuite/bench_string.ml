@@ -282,7 +282,7 @@ let nreplace_recipe ~str ~sub ~by =
   let compare i =
     let rec compare' j =
       if j >= sublen then true
-      else if i+j >= strlen || str.[i+j] <> sub.[j] then false
+      else if i+j >= strlen || BatString.unsafe_get str (i+j) <> BatString.unsafe_get sub j then false
       else compare' (j+1)
     in
     compare' 0

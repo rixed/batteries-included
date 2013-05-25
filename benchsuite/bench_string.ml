@@ -1,5 +1,64 @@
 (* cd .. && ocamlbuild benchsuite/bench_string.native && _build/benchsuite/bench_string.native *)
 
+(*************************************************************
+ * find benchmarks
+ *************************************************************)
+
+let rec find_simple ~sub ?(pos=0) str =
+  let find pos =
+    let next =
+      try BatString.find_from str pos sub with
+      Not_found -> raise BatEnum.No_more_elements in
+    (next, next+1)
+  in
+  BatEnum.from_loop pos find
+
+let find_horspool ~sub =
+  let sublen = String.length sub in
+
+  (* initialize bad char table, improved horspool - all elements are >0 *)
+  let shift = Array.make 256 sublen in
+  for i=0 to sublen - 1 do
+    Array.unsafe_set shift (int_of_char (BatString.unsafe_get sub i)) (sublen - i)
+  done;
+
+  (* allow initialization on partial binding *)
+  fun ?(pos=0) str ->
+    let strlen = String.length str in
+    let rec worker i =
+      if i+sublen > strlen then raise BatEnum.No_more_elements;
+      let i =
+          i + BatArray.unsafe_get shift
+                (int_of_char (BatString.unsafe_get str (i+sublen)))
+      in
+      if i+sublen > strlen then raise BatEnum.No_more_elements;
+      let j = ref 0 in
+      while !j < sublen && BatString.unsafe_get str (i + !j) = BatString.unsafe_get sub !j do
+        incr j;
+      done;
+      if !j = sublen
+      then i
+      else worker i
+    in
+    let nexti = ref (pos-1) in
+    BatEnum.from (fun () -> let i = worker !nexti in nexti := i; i)
+
+let find_bench name (text :string) pattern =
+  let test_find (f :sub:string -> ?pos:int -> string -> int BatEnum.t) niters =
+    for j = 1 to niters do
+      BatEnum.force (f ~sub:pattern text);
+    done
+  in
+  Bench.bench_n [
+    name ^ ":simple", test_find find_simple;
+    name ^ ":horspool", test_find find_horspool;
+  ]
+
+
+(*************************************************************
+ * replace benchmarks
+ *************************************************************)
+
 let replace_string_simple ~str ~sub ~by =
   (* opening BatString locally here shadows 'sub'; sometimes life sucks... *)
   try
@@ -276,7 +335,7 @@ let nreplace_bench name input_string =
     name ^ ":substring optimized", test_nreplace nreplace_substring_optimized;
     name ^ ":substring enum", test_nreplace nreplace_substring_enum;
     name ^ ":optimized", test_nreplace nreplace_optimized;
-    name ^ ":recipe", test_nreplace nreplace_optimized;
+    name ^ ":recipe", test_nreplace nreplace_recipe;
   ]
 
 let () =
@@ -286,6 +345,8 @@ let () =
     
     nreplace_bench "nreplace:short_string" short_string;
     nreplace_bench "nreplace:long_string" long_string;
+
+    find_bench "find" long_string "a";
   ]
 
 (* representative results:

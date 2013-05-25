@@ -6,12 +6,11 @@
 
 let rec find_simple ~sub ?(pos=0) str =
   let find pos =
-    let next =
-      try BatString.find_from str pos sub with
-      Not_found -> raise BatEnum.No_more_elements in
-    (next, next+1)
+    try BatString.find_from str pos sub with
+    Not_found -> raise BatEnum.No_more_elements
   in
-  BatEnum.from_loop pos find
+  let nexti = ref pos in
+  BatEnum.from (fun () -> let i = find !nexti in nexti := i+1; i)
 
 let find_horspool ~sub =
   let sublen = String.length sub in

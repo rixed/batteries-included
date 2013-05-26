@@ -8,43 +8,58 @@ open String
  * find benchmarks
  *************************************************************)
 
-let rec find_simple ~sub ?(pos=0) str =
-  let find pos =
-    try BatString.find_from str pos sub with
-    Not_found -> raise BatEnum.No_more_elements
-  in
-  let nexti = ref pos in
-  BatEnum.from (fun () -> let i = find !nexti in nexti := i+1; i)
-
 let find_horspool ~sub =
   let sublen = String.length sub in
 
-  (* initialize bad char table, improved horspool - all elements are >0 *)
-  let shift = Array.make 256 sublen in
-  for i=0 to sublen - 1 do
-    Array.unsafe_set shift (int_of_char (BatString.unsafe_get sub i)) (sublen - i)
+  (* initialize shifting table. improved horspool - all elements are >=1
+   * Abuse string as uint8 array. *)
+  let shift = String.make 256 (char_of_int (min 255 sublen)) in
+  for i = max 0 (sublen - 255) to sublen - 1 do
+    String.unsafe_set shift
+      (int_of_char (String.unsafe_get sub i))
+      (char_of_int (sublen - i))
   done;
 
-  (* allow initialization on partial binding *)
-  fun ?(pos=0) str ->
+  (* allow early initialization on partial binding *)
+  fun ~str ~pos ->
     let strlen = String.length str in
     let rec worker i =
-      if i+sublen > strlen then raise BatEnum.No_more_elements;
+      if i+sublen >= strlen then raise Not_found;
+      (* shift according to shifting table - will shift >=1 *)
       let i =
-          i + BatArray.unsafe_get shift
-                (int_of_char (BatString.unsafe_get str (i+sublen)))
+          i + int_of_char (String.unsafe_get shift
+                (int_of_char (BatString.unsafe_get str (i+sublen))))
       in
-      if i+sublen > strlen then raise BatEnum.No_more_elements;
+      if i+sublen > strlen then raise Not_found;
       let j = ref 0 in
-      while !j < sublen && BatString.unsafe_get str (i + !j) = BatString.unsafe_get sub !j do
+      (* compare - since order is not important unroll the loop a bit
+       * by doing two comparisons at once, starting at both ends. *)
+      while
+        BatString.unsafe_get str (i + !j) = BatString.unsafe_get sub !j &&
+(*         BatString.unsafe_get str (i + sublen - 1 - !j) = BatString.unsafe_get sub (sublen - 1 - !j) && *)
+        1 * !j < sublen
+      do
         incr j;
       done;
-      if !j = sublen
+      (* all equal ? *)
+      if 1 * !j >= sublen
       then i
       else worker i
     in
-    let nexti = ref (pos-1) in
-    BatEnum.from (fun () -> let i = worker !nexti in nexti := i; i)
+    worker (pos-1)
+
+
+let find_all ~sub ?(pos=0) str =
+  let worker = find_horspool ~sub in
+  let nexti = ref pos in
+  BatEnum.from begin fun () ->
+    let i =
+      try worker ~pos:!nexti ~str with
+      Not_found -> raise Enum.No_more_elements
+    in
+    nexti := i+1;
+    i
+  end
 
 
 (*************************************************************
@@ -102,13 +117,13 @@ let nreplace_rxd ~str ~sub ~by =
       (* still need the first chunk *)
       blit str 0 newstr 0 i
     | Some i' ->
-      let j' = j - (i - i') - dlen in
-      (* newstring.[j .. end] is already inited. Init from j' to (j-1). *)
-      blit by 0 newstr j' bylen ;
-      blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
-      loop_copy i' j' in
-  loop_copy strlen newlen ;
-  newstr
+let j' = j - (i - i') - dlen in
+(* newstring.[j .. end] is already inited. Init from j' to (j-1). *)
+blit by 0 newstr j' bylen ;
+blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
+loop_copy i' j' in
+loop_copy strlen newlen ;
+newstr
 
 (* So Thelema proposed a version without the double rfind_from
  * (taken from https://gist.github.com/thelema/5639270 + small fix) *)
@@ -135,8 +150,8 @@ let nreplace_thelema ~str ~sub ~by =
       blit str i newstr j di ;
       blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
-    loop_copy 0 0 idxes ;
-    newstr
+  loop_copy 0 0 idxes ;
+  newstr
 
 (* Same as above but avoiding the List.length *)
 let nreplace_thelema2 ~str ~sub ~by =
@@ -161,82 +176,44 @@ let nreplace_thelema2 ~str ~sub ~by =
       blit str i newstr j di ;
       blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
-    loop_copy 0 0 idxes ;
-    newstr
+  loop_copy 0 0 idxes ;
+  newstr
 
-let nreplace_thelema_adaptive ~str ~sub ~by =
-  if sub = "" then invalid_arg "nreplace: cannot replace all empty substrings" ;
-  let strlen = length str in
-  let sublen = length sub in
-  let bylen = length by in
-  let dlen = bylen - sublen in
-  let rec loop_subst idxes newlen i =
-    match (try rfind_from str (i-1) sub with Not_found -> -1) with
-    | -1 -> idxes, newlen
-    | i' -> loop_subst (i'::idxes) (newlen+dlen) i' in
-  let idxes, newlen =
-    if sublen < 4 || strlen < 300
-    then loop_subst [] strlen strlen
-    else
-      let idxes =
-        let skip_unto = ref 0 in
-        find_horspool sub str |>
-        Enum.filter begin function
-          |i when i < !skip_unto -> false
-          |i -> skip_unto := i + sublen; true
-        end
-      in
-      Enum.clone idxes |> List.of_enum,
-      strlen + Enum.count idxes * dlen
-  in
-  let newstr = create newlen in
-  let rec loop_copy i j idxes =
-    match idxes with
-    | [] ->
-      (* still need the last chunk *)
-      blit str i newstr j (strlen-i)
-    | i'::rest ->
-      let di = i' - i in
-      blit str i newstr j di ;
-      blit by 0 newstr (j + di) bylen ;
-      loop_copy (i + di + sublen) (j + di + bylen) rest in
-    loop_copy 0 0 idxes ;
-    newstr
-
-(* Independantly, MadRoach implemented the same idea with less luck aparently *)
+(* Independently, MadRoach implemented the same idea with less luck aparently *)
 let nreplace_madroach ~str ~sub ~by =
   let strlen = String.length str
   and sublen = String.length sub
   and bylen  = String.length by in
+  let dlen = bylen - sublen in
 
   (* collect all positions where we need to replace,
    * skipping overlapping occurences *)
-  let todo =
-    let skip_unto = ref 0 in
-    (if sublen < 3 then find_simple else find_horspool) sub str |>
-    Enum.filter begin function
-      |i when i < !skip_unto -> false
-      |i -> skip_unto := i + sublen; true
-    end
+  let find = find_horspool ~sub ~str in
+  let rec loop todo dstlen i =
+    try
+      let i' = find i in
+      loop (i'::todo) (dstlen + dlen) (i'+1)
+    with
+    Not_found -> todo, dstlen
   in
+  let todo, dstlen = loop [] strlen 0 in
 
-  (* create destination string *)
-  let dst = String.create (strlen + Enum.count todo * (bylen - sublen)) in
-
-  (* do the replacement *)
-  let srci, dsti =
-    fold
-      begin fun (srci,dsti) i ->
-        let skiplen = i-srci in
-        String.blit str srci dst dsti skiplen;
-        String.blit by 0 dst (dsti+skiplen) bylen;
-        (srci+skiplen+sublen, dsti+skiplen+bylen)
-      end
-      (0,0)
-      todo
+  (* blit to new destination string *)
+  let dst = String.create dstlen in
+  let rec replace li delta = function
+    |i::todo ->
+        let delta = delta - dlen in
+        let dsti = i + delta in
+        String.unsafe_blit str (i+sublen) dst (dsti+bylen) (li-i-sublen);
+        String.unsafe_blit by 0 dst dsti bylen;
+        replace i delta todo
+    |[] ->
+        String.unsafe_blit str 0 dst 0 li;
+        li, delta
   in
-  assert (strlen - srci = String.length dst - dsti);
-  String.blit str srci dst dsti (strlen - srci);
+  let li, delta = replace strlen (dstlen-strlen) todo in
+  assert (delta = 0);
+  String.blit str 0 dst 0 li;
   dst
 
 (* Gasche had its own idea based on substrings.
@@ -355,8 +332,8 @@ let nreplace_substring_enum ~str ~sub ~by =
  * realistic words by others. *)
 
 let long_text =
-  File.lines_of "benchsuite/bench_nreplace.ml"
-  |> List.of_enum |> concat ""
+  File.lines_of "benchsuite/bench.ml"
+  |> Enum.cycle ~times:100 |> List.of_enum |> concat ""
 
 let run rep length =
   (* "realistic" workload that attempts to exercise all interesting cases *)
@@ -377,11 +354,8 @@ let do_bench_for_len length name =
     "thelema "^ name, run nreplace_thelema ;
     *)
     "thelema2 "^ name, run nreplace_thelema2 ;
-    "thelema_adaptive "^ name, run nreplace_thelema_adaptive ;
-    (*
     "madroach "^ name, run nreplace_madroach ;
-    "gasche simple "^ name, run nreplace_substring_simple ;
-    *)
+(*     "gasche simple "^ name, run nreplace_substring_simple ; *)
     (*"gasche enum "^ name, run nreplace_substring_enum ;*)
     "gasche optimized "^ name, run nreplace_substring_optimized ;
   ] length |>
@@ -402,7 +376,6 @@ let main =
             "rxd", nreplace_rxd ;
             "thelema", nreplace_thelema ;
             "thelema2", nreplace_thelema2 ;
-            "thelema_adaptive", nreplace_thelema_adaptive ;
             "madroach", nreplace_madroach ;
             "gasche simple", nreplace_substring_simple ;
             (*"gasche enum", nreplace_substring_enum ;*)
@@ -413,8 +386,17 @@ let main =
     check ~str:"foo bar baz" ~sub:"a" ~by:"BAR" ;
     check ~str:"foo bar baz" ~sub:" " ~by:"   " ;
 
-    do_bench_for_len 100 "short" ;
+    do_bench_for_len 10 "10bytes" ;
     print_endline "-------------------------------";
-    do_bench_for_len 1000 "long" ;
+    do_bench_for_len 100 "100bytes" ;
     print_endline "-------------------------------";
-    do_bench_for_len 10000 "very long"
+    do_bench_for_len 1000 "1kb" ;
+    print_endline "-------------------------------";
+    do_bench_for_len 10_000 "10kb";
+(*
+    print_endline "-------------------------------";
+    do_bench_for_len 100_000 "100kb";
+    print_endline "-------------------------------";
+    do_bench_for_len 1_000_000 "1mb" ;
+*)
+  ()

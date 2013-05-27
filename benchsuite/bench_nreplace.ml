@@ -354,10 +354,18 @@ let find_bench_for_len name strlen sub =
   in
   let horspool = find_horspool
   and simple ~sub ~str ~pos = String.find_from str pos sub in
+  let adaptive ~sub ~str =
+    let strlen = String.length str
+    and sublen = String.length sub in
+    if (sublen - 2) * strlen < 190 * sublen
+    then simple ~sub ~str
+    else horspool ~sub ~str
+  in
   print_newline ();
   Bench.bench_n [
     "simple "^ name, run simple;
     "horspool "^ name, run horspool;
+    "adaptive "^ name, run adaptive;
   ] |>
   Bench.run_outputs
 ;;
@@ -416,19 +424,21 @@ let main =
 
     print_endline "\nBenchmarking find:\n=======================================\n";
 
-    let vary_pattern length =
-      find_bench_for_len ("1 in " ^ string_of_int length ^ "bytes") length " ";
-      find_bench_for_len ("3 in " ^ string_of_int length ^ "bytes") length "let";
-      find_bench_for_len ("6 in " ^ string_of_int length ^ "bytes") length "match ";
-      find_bench_for_len ("40 in " ^ string_of_int length ^ "bytes") length "let resample ests num_resamples samples ";
+    let vary_length sub =
+      let sublen = string_of_int (String.length sub) in
+      Array.iter begin fun l ->
+        find_bench_for_len (sublen ^ " in " ^ string_of_int l ^ "bytes") l sub;
+      end
+      [|10; 100; 150; 200; 500; 1_000; 10_000|]
     in
-    vary_pattern 10;
-    vary_pattern 100;
-    vary_pattern 200;
-    vary_pattern 300;
-    vary_pattern 500;
-    vary_pattern 1_000;
-    vary_pattern 10_000;
+    vary_length " ";
+    vary_length "le";
+    vary_length "let";
+    vary_length "matc";
+    vary_length "match";
+    vary_length "match ";
+    vary_length "let resample ests num_resamples samples ";
+
     print_endline "\nBenchmarking nreplace:\n=======================================\n";
 
     replace_bench_for_len 10 "10bytes" ;

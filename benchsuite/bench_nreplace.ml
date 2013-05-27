@@ -117,13 +117,13 @@ let nreplace_rxd ~str ~sub ~by =
       (* still need the first chunk *)
       blit str 0 newstr 0 i
     | Some i' ->
-let j' = j - (i - i') - dlen in
-(* newstring.[j .. end] is already inited. Init from j' to (j-1). *)
-blit by 0 newstr j' bylen ;
-blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
-loop_copy i' j' in
-loop_copy strlen newlen ;
-newstr
+      let j' = j - (i - i') - dlen in
+      (* newstring.[j .. end] is already inited. Init from j' to (j-1). *)
+      blit by 0 newstr j' bylen ;
+      blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
+      loop_copy i' j' in
+  loop_copy strlen newlen ;
+  newstr
 
 (* So Thelema proposed a version without the double rfind_from
  * (taken from https://gist.github.com/thelema/5639270 + small fix) *)
@@ -150,8 +150,8 @@ let nreplace_thelema ~str ~sub ~by =
       blit str i newstr j di ;
       blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
-  loop_copy 0 0 idxes ;
-  newstr
+    loop_copy 0 0 idxes ;
+    newstr
 
 (* Same as above but avoiding the List.length *)
 let nreplace_thelema2 ~str ~sub ~by =
@@ -176,8 +176,8 @@ let nreplace_thelema2 ~str ~sub ~by =
       blit str i newstr j di ;
       blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
-  loop_copy 0 0 idxes ;
-  newstr
+    loop_copy 0 0 idxes ;
+    newstr
 
 (* Independently, MadRoach implemented the same idea with less luck aparently *)
 let nreplace_madroach ~str ~sub ~by =
@@ -243,12 +243,16 @@ let nsplit_enum str pat =
   let pat_len = String.length pat in
   let pos = ref 0 in
   BatEnum.from (fun () ->
+    if !pos < 0 then raise BatEnum.No_more_elements else
     try
       let next_pos = BatString.find_from str !pos pat in
       let sub = BatSubstring.unsafe_substring str !pos (next_pos - !pos) in
       pos := next_pos + pat_len;
       sub
-    with Not_found -> raise BatEnum.No_more_elements
+    with Not_found ->
+      let sub = BatSubstring.extract str !pos None in
+      pos := -1 ;
+      sub
   )
 
 (* should be BatSubstring.concat, with a separator argument *)
@@ -371,16 +375,14 @@ let replace_bench_for_len length name =
   in
 
   Bench.bench_funs [
-    (*
     "orig "^ name, run nreplace_orig ;
     "glyn "^ name, run nreplace_glyn ;
     "rxd "^ name, run nreplace_rxd ;
     "thelema "^ name, run nreplace_thelema ;
-    *)
     "thelema2 "^ name, run nreplace_thelema2 ;
     "madroach "^ name, run nreplace_madroach ;
-(*     "gasche simple "^ name, run nreplace_substring_simple ; *)
-    (*"gasche enum "^ name, run nreplace_substring_enum ;*)
+    "gasche simple "^ name, run nreplace_substring_simple ;
+    "gasche enum "^ name, run nreplace_substring_enum ;
     "gasche optimized "^ name, run nreplace_substring_optimized ;
   ] length |>
   Bench.run_outputs
@@ -402,14 +404,13 @@ let main =
             "thelema2", nreplace_thelema2 ;
             "madroach", nreplace_madroach ;
             "gasche simple", nreplace_substring_simple ;
-            (*"gasche enum", nreplace_substring_enum ;*)
+            "gasche enum", nreplace_substring_enum ;
             "gasche optimz", nreplace_substring_optimized
         ] in
     check ~str:"foo bar baz" ~sub:"bar" ~by:"BAR" ;
     check ~str:"foo bar baz" ~sub:"bar" ~by:"" ;
     check ~str:"foo bar baz" ~sub:"a" ~by:"BAR" ;
     check ~str:"foo bar baz" ~sub:" " ~by:"   " ;
-
 
     print_endline "\nBenchmarking find:\n=======================================\n";
 
@@ -426,7 +427,6 @@ let main =
     vary_pattern 500;
     vary_pattern 1_000;
     vary_pattern 10_000;
-(*
     print_endline "\nBenchmarking nreplace:\n=======================================\n";
 
     replace_bench_for_len 10 "10bytes" ;
@@ -441,6 +441,5 @@ let main =
     do_bench_for_len 100_000 "100kb";
     print_endline "\n-------------------------------";
     do_bench_for_len 1_000_000 "1mb" ;
-*)
 *)
   ()

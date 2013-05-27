@@ -48,6 +48,14 @@ let find_horspool ~sub =
     in
     worker (pos-1)
 
+let find_simple ~sub ~str ~pos = String.find_from str pos sub
+
+let find_adaptive ~sub ~str =
+  let strlen = String.length str
+  and sublen = String.length sub in
+  if (sublen - 2) * strlen < 190 * sublen
+  then find_simple ~sub ~str
+  else find_horspool ~sub ~str
 
 let find_all ~sub ?(pos=0) str =
   let worker = find_horspool ~sub in
@@ -188,7 +196,7 @@ let nreplace_madroach ~str ~sub ~by =
 
   (* collect all positions where we need to replace,
    * skipping overlapping occurences *)
-  let find = find_horspool ~sub ~str in
+  let find = find_adaptive ~sub ~str in
   let rec loop todo dstlen i =
     try
       let i' = find i in
@@ -352,20 +360,11 @@ let find_bench_for_len name strlen sub =
       with Not_found -> ()
     done
   in
-  let horspool = find_horspool
-  and simple ~sub ~str ~pos = String.find_from str pos sub in
-  let adaptive ~sub ~str =
-    let strlen = String.length str
-    and sublen = String.length sub in
-    if (sublen - 2) * strlen < 190 * sublen
-    then simple ~sub ~str
-    else horspool ~sub ~str
-  in
   print_newline ();
   Bench.bench_n [
-    "simple "^ name, run simple;
-    "horspool "^ name, run horspool;
-    "adaptive "^ name, run adaptive;
+    "simple "^ name, run find_simple;
+    "horspool "^ name, run find_horspool;
+    "adaptive "^ name, run find_adaptive;
   ] |>
   Bench.run_outputs
 ;;
@@ -422,20 +421,23 @@ let main =
     check ~str:"foo bar baz" ~sub:"a" ~by:"BAR" ;
     check ~str:"foo bar baz" ~sub:" " ~by:"   " ;
 
-    print_endline "\nBenchmarking find:\n=======================================\n";
+    print_endline "\nBenchmarking find:\n=============================================\n";
 
     let vary_length sub =
       let sublen = string_of_int (String.length sub) in
       Array.iter begin fun l ->
         find_bench_for_len (sublen ^ " in " ^ string_of_int l ^ "bytes") l sub;
+        print_endline "-----------------------------------------------------------";
       end
       [|10; 100; 150; 200; 500; 1_000; 10_000|]
     in
     vary_length " ";
-    vary_length "le";
+(*     vary_length "le"; *)
     vary_length "let";
+(*
     vary_length "matc";
     vary_length "match";
+*)
     vary_length "match ";
     vary_length "let resample ests num_resamples samples ";
 

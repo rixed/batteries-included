@@ -37,16 +37,16 @@ let find_horspool ~sub =
       while
         BatString.unsafe_get str (i + !j) = BatString.unsafe_get sub !j &&
         BatString.unsafe_get str (i + sublen - 1 - !j) = BatString.unsafe_get sub (sublen - 1 - !j) &&
-        2 * !j < sublen
-      do
-        incr j;
-      done;
+        (incr j; 2 * !j < sublen)
+      do () done;
       (* all equal ? *)
       if 2 * !j >= sublen
       then i
       else worker i
     in
-    worker (pos-1)
+    if pos < 0 || pos > strlen then raise (Invalid_argument "String.find_from");
+    if sublen = 0 then pos
+    else worker (pos-1)
 
 let find_simple ~sub ~str ~pos = String.find_from str pos sub
 

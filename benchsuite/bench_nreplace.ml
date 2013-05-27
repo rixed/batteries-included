@@ -36,13 +36,13 @@ let find_horspool ~sub =
        * by doing two comparisons at once, starting at both ends. *)
       while
         BatString.unsafe_get str (i + !j) = BatString.unsafe_get sub !j &&
-(*         BatString.unsafe_get str (i + sublen - 1 - !j) = BatString.unsafe_get sub (sublen - 1 - !j) && *)
-        1 * !j < sublen
+        BatString.unsafe_get str (i + sublen - 1 - !j) = BatString.unsafe_get sub (sublen - 1 - !j) &&
+        2 * !j < sublen
       do
         incr j;
       done;
       (* all equal ? *)
-      if 1 * !j >= sublen
+      if 2 * !j >= sublen
       then i
       else worker i
     in

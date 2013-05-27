@@ -100,12 +100,12 @@ let nreplace_rxd ~str ~sub ~by =
     match (try Some (rfind_from str (i-1) sub) with Not_found -> None) with
     | None ->
       (* still need the first chunk *)
-      blit str 0 newstr 0 i
+      String.unsafe_blit str 0 newstr 0 i
     | Some i' ->
       let j' = j - (i - i') - dlen in
       (* newstring.[j .. end] is already inited. Init from j' to (j-1). *)
-      blit by 0 newstr j' bylen ;
-      blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
+      String.unsafe_blit by 0 newstr j' bylen ;
+      String.unsafe_blit str (i'+sublen) newstr (j'+bylen) (i-i'-sublen) ;
       loop_copy i' j' in
   loop_copy strlen newlen ;
   newstr
@@ -129,11 +129,11 @@ let nreplace_thelema ~str ~sub ~by =
     match idxes with
     | [] ->
       (* still need the last chunk *)
-      blit str i newstr j (strlen-i)
+      String.unsafe_blit str i newstr j (strlen-i)
     | i'::rest ->
       let di = i' - i in
-      blit str i newstr j di ;
-      blit by 0 newstr (j + di) bylen ;
+      String.unsafe_blit str i newstr j di ;
+      String.unsafe_blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
     loop_copy 0 0 idxes ;
     newstr
@@ -155,11 +155,11 @@ let nreplace_thelema2 ~str ~sub ~by =
     match idxes with
     | [] ->
       (* still need the last chunk *)
-      blit str i newstr j (strlen-i)
+      String.unsafe_blit str i newstr j (strlen-i)
     | i'::rest ->
       let di = i' - i in
-      blit str i newstr j di ;
-      blit by 0 newstr (j + di) bylen ;
+      String.unsafe_blit str i newstr j di ;
+      String.unsafe_blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
     loop_copy 0 0 idxes ;
     newstr
@@ -194,11 +194,11 @@ let nreplace_thelema_adaptive ~str ~sub ~by =
     match idxes with
     | [] ->
       (* still need the last chunk *)
-      blit str i newstr j (strlen-i)
+      String.unsafe_blit str i newstr j (strlen-i)
     | i'::rest ->
       let di = i' - i in
-      blit str i newstr j di ;
-      blit by 0 newstr (j + di) bylen ;
+      String.unsafe_blit str i newstr j di ;
+      String.unsafe_blit by 0 newstr (j + di) bylen ;
       loop_copy (i + di + sublen) (j + di + bylen) rest in
     loop_copy 0 0 idxes ;
     newstr

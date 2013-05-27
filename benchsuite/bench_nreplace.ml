@@ -363,18 +363,20 @@ let find_bench_for_len name strlen sub =
 ;;
 
 let replace_bench_for_len length name =
-  let run rep length =
-    (* "realistic" workload that attempts to exercise all interesting cases *)
-    let str = sub long_text 0 length in
-    let str = rep ~str ~sub:"let" ~by:"let there be light" in
-    let str = rep ~str ~sub:"nreplace" ~by:"nr" in
-    let str = rep ~str ~sub:"you wont find me" ~by:"" in
-    let str = rep ~str ~sub:"match" ~by:"match" in
-    let str = rep ~str ~sub:" " ~by:"  " in
-    ignore str
+  let run rep iters =
+    for i=1 to iters do
+      (* "realistic" workload that attempts to exercise all interesting cases *)
+      let str = sub long_text 0 length in
+      let str = rep ~str ~sub:"let" ~by:"let there be light" in
+      let str = rep ~str ~sub:"nreplace" ~by:"nr" in
+      let str = rep ~str ~sub:"you wont find me" ~by:"" in
+      let str = rep ~str ~sub:"match" ~by:"match" in
+      let str = rep ~str ~sub:" " ~by:"  " in
+      ignore str
+    done
   in
 
-  Bench.bench_funs [
+  Bench.bench_n [
     "orig "^ name, run nreplace_orig ;
     "glyn "^ name, run nreplace_glyn ;
     "rxd "^ name, run nreplace_rxd ;
@@ -384,7 +386,7 @@ let replace_bench_for_len length name =
     "gasche simple "^ name, run nreplace_substring_simple ;
     "gasche enum "^ name, run nreplace_substring_enum ;
     "gasche optimized "^ name, run nreplace_substring_optimized ;
-  ] length |>
+  ] |>
   Bench.run_outputs
 
 let main =

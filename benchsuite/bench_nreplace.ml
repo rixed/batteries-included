@@ -335,17 +335,41 @@ let long_text =
   File.lines_of "benchsuite/bench.ml"
   |> Enum.cycle ~times:100 |> List.of_enum |> concat ""
 
-let run rep length =
-  (* "realistic" workload that attempts to exercise all interesting cases *)
-  let str = sub long_text 0 length in
-  let str = rep ~str ~sub:"let" ~by:"let there be light" in
-  let str = rep ~str ~sub:"nreplace" ~by:"nr" in
-  let str = rep ~str ~sub:"you wont find me" ~by:"" in
-  let str = rep ~str ~sub:"match" ~by:"match" in
-  let str = rep ~str ~sub:" " ~by:"  " in
-  ignore str
+let find_bench_for_len name strlen sub =
+  let str = String.sub long_text 0 strlen in
+  let run (f :sub:string -> str:string -> pos:int -> int) iters =
+    for i=1 to iters do
+      let f' = f ~sub ~str in
+      try
+        let rec loop i =
+          loop (f' ~pos:i + 1)
+        in
+        loop 0
+      with Not_found -> ()
+    done
+  in
+  let horspool = find_horspool
+  and simple ~sub ~str ~pos = String.find_from str pos sub in
+  print_newline ();
+  Bench.bench_n [
+    "simple "^ name, run simple;
+    "horspool "^ name, run horspool;
+  ] |>
+  Bench.run_outputs
+;;
 
-let do_bench_for_len length name =
+let replace_bench_for_len length name =
+  let run rep length =
+    (* "realistic" workload that attempts to exercise all interesting cases *)
+    let str = sub long_text 0 length in
+    let str = rep ~str ~sub:"let" ~by:"let there be light" in
+    let str = rep ~str ~sub:"nreplace" ~by:"nr" in
+    let str = rep ~str ~sub:"you wont find me" ~by:"" in
+    let str = rep ~str ~sub:"match" ~by:"match" in
+    let str = rep ~str ~sub:" " ~by:"  " in
+    ignore str
+  in
+
   Bench.bench_funs [
     (*
     "orig "^ name, run nreplace_orig ;
@@ -386,17 +410,37 @@ let main =
     check ~str:"foo bar baz" ~sub:"a" ~by:"BAR" ;
     check ~str:"foo bar baz" ~sub:" " ~by:"   " ;
 
-    do_bench_for_len 10 "10bytes" ;
-    print_endline "-------------------------------";
-    do_bench_for_len 100 "100bytes" ;
-    print_endline "-------------------------------";
-    do_bench_for_len 1000 "1kb" ;
-    print_endline "-------------------------------";
-    do_bench_for_len 10_000 "10kb";
+
+    print_endline "\nBenchmarking find:\n=======================================\n";
+
+    let vary_pattern length =
+      find_bench_for_len ("1 in " ^ string_of_int length ^ "bytes") length " ";
+      find_bench_for_len ("3 in " ^ string_of_int length ^ "bytes") length "let";
+      find_bench_for_len ("6 in " ^ string_of_int length ^ "bytes") length "match ";
+      find_bench_for_len ("40 in " ^ string_of_int length ^ "bytes") length "let resample ests num_resamples samples ";
+    in
+    vary_pattern 10;
+    vary_pattern 100;
+    vary_pattern 200;
+    vary_pattern 300;
+    vary_pattern 500;
+    vary_pattern 1_000;
+    vary_pattern 10_000;
 (*
-    print_endline "-------------------------------";
+    print_endline "\nBenchmarking nreplace:\n=======================================\n";
+
+    replace_bench_for_len 10 "10bytes" ;
+    print_endline "\n-------------------------------";
+    replace_bench_for_len 100 "100bytes" ;
+    print_endline "\n-------------------------------";
+    replace_bench_for_len 1000 "1kb" ;
+    print_endline "\n-------------------------------";
+    replace_bench_for_len 10_000 "10kb";
+(*
+    print_endline "\n-------------------------------";
     do_bench_for_len 100_000 "100kb";
-    print_endline "-------------------------------";
+    print_endline "\n-------------------------------";
     do_bench_for_len 1_000_000 "1mb" ;
+*)
 *)
   ()

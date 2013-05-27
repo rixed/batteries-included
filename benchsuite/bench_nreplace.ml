@@ -266,12 +266,16 @@ let nsplit_enum str pat =
   let pat_len = String.length pat in
   let pos = ref 0 in
   BatEnum.from (fun () ->
+    if !pos < 0 then raise BatEnum.No_more_elements else
     try
       let next_pos = BatString.find_from str !pos pat in
       let sub = BatSubstring.unsafe_substring str !pos (next_pos - !pos) in
       pos := next_pos + pat_len;
       sub
-    with Not_found -> raise BatEnum.No_more_elements
+    with Not_found ->
+      let sub = BatSubstring.extract str !pos None in
+      pos := -1 ;
+      sub
   )
 
 (* should be BatSubstring.concat, with a separator argument *)
@@ -378,7 +382,7 @@ let do_bench_for_len length name =
     "thelema_adaptive "^ name, run nreplace_thelema_adaptive ;
     "madroach "^ name, run nreplace_madroach ;
     "gasche simple "^ name, run nreplace_substring_simple ;
-    (*"gasche enum "^ name, run nreplace_substring_enum ;*)
+    "gasche enum "^ name, run nreplace_substring_enum ;
     "gasche optimized "^ name, run nreplace_substring_optimized ;
   ] length |>
   Bench.run_outputs
@@ -401,7 +405,7 @@ let main =
             "thelema_adaptive", nreplace_thelema_adaptive ;
             "madroach", nreplace_madroach ;
             "gasche simple", nreplace_substring_simple ;
-            (*"gasche enum", nreplace_substring_enum ;*)
+            "gasche enum", nreplace_substring_enum ;
             "gasche optimz", nreplace_substring_optimized
         ] in
     check ~str:"foo bar baz" ~sub:"bar" ~by:"BAR" ;

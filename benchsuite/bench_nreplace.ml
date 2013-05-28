@@ -221,7 +221,6 @@ let nreplace_madroach ~str ~sub ~by =
   in
   let li, delta = replace strlen (dstlen-strlen) todo in
   assert (delta = 0);
-  String.blit str 0 dst 0 li;
   dst
 
 (* Gasche had its own idea based on substrings.

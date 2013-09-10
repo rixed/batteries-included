@@ -236,3 +236,35 @@ coverage/index.html: $(TESTDEPS) $(QTESTDIR)/all_tests.ml
 	$(OCAMLBUILD) coverage/index.html
 
 coverage: coverage/index.html
+
+###############################################################################
+#	Work around ocamlbuild to quickly build lib & doc (use -j)
+###############################################################################
+
+.PHONY: fast fast-doc fast-clean fast-man
+
+fast:
+	@$(MAKE) -C src -f Makefly prepare
+	@$(MAKE) -C src -f Makefly all
+fast-doc:
+	@$(MAKE) -C src -f Makefly doc
+fast-man:
+	@$(MAKE) -C src -f Makefly man
+fast-clean:
+	@$(MAKE) -C src -f Makefly clean
+
+.PHONY: fast-install fast-install-doc fast-install-man fast-reinstall
+
+fast-install: fast uninstall_packages
+	ocamlfind install $(NAME) $(INSTALL_FILES) -optional $(OPT_INSTALL_FILES)
+fast-install-doc: fast-doc
+	mkdir -p $(DOCROOT)
+	mkdir -p $(DOCROOT)/html/api
+	cp src/batteries.docdir/html/* $(DOCROOT)/html/api
+	cp LICENSE README.md FAQ $(DOCROOT)
+fast-install-man: fast-man
+	install src/batteries.docdir/man/* /usr/local/man/man3/
+fast-reinstall:
+	$(MAKE) fastuninstall
+	$(MAKE) fast-install
+

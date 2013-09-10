@@ -1,0 +1,208 @@
+# A basic Makefile for building and installing Batteries Included
+# vim: filetype=make
+top_srcdir = ..
+uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+
+ifeq ($(uname_S),Darwin)
+  BATTERIES_NATIVE ?= yes
+  BATTERIES_NATIVE_SHLIB ?= no
+else
+  BATTERIES_NATIVE ?= yes
+  BATTERIES_NATIVE_SHLIB ?= $(BATTERIES_NATIVE)
+endif
+
+# What to build
+TARGETS  = batteries.cma
+TARGETS += batteriesHelp.cmo
+TARGETS += batteriesThread.cma
+TEMPLATE_ML  = $(wildcard *.mlv)
+TEMPLATE_MLI = $(wildcard *.mliv)
+TEMPLATED_SOURCES = $(TEMPLATE_ML:.mlv=.ml) $(TEMPLATE_MLI:.mliv=.mli)
+GENERATED_SOURCES = $(TEMPLATED_SOURCES) batteriesConfig.ml
+SOURCES_ = $(wildcard *.ml) $(GENERATED_SOURCES)
+SOURCES = $(sort $(SOURCES_)) # remove possible dups
+
+ifeq ($(BATTERIES_NATIVE_SHLIB), yes)
+  TARGETS += batteries.cmxs batteriesThread.cmxs
+else
+ifeq ($(BATTERIES_NATIVE), yes)
+  TARGETS += batteries.cmxa batteriesThread.cmxa
+else
+endif
+endif
+
+.PHONY: all clean prefilter prepare doc
+
+all: $(TARGETS)
+
+# ensure prefilter is done before computing dependancies
+prepare:
+	@$(MAKE) -f $(word 1,$(MAKEFILE_LIST)) prefilter
+	@$(RM) depend && $(MAKE) -f $(word 1,$(MAKEFILE_LIST)) depend
+	@echo "You can now run make"
+
+# Do not depend on source because:
+# 1- ocamldep is slow
+# 2- computing deps must be done before 'make -jN'
+depend:
+	$(OCAMLDEP) \
+		$(SOURCES) $(wildcard *.mli) \
+		batteriesHelp.ml \
+		batMutex.ml batRMutex.ml batteriesThread.ml > $@
+
+-include depend
+
+clean:
+	@$(RM) $(GENERATED_SOURCES) depend *.cmo *.cmi *.cmx *.cma *.cmxa *.cmxs *.o *.a *.odoc
+	@touch depend
+
+###############################################################################
+#   Building the libraries
+###############################################################################
+
+.SUFFIXES: .cma .cmo .cmi .cmx .cmxa .cmxs .ml .mli .odoc
+
+OCAMLC   = ocamlfind ocamlc
+OCAMLOPT = ocamlfind ocamlopt
+OCAMLDEP = ocamlfind ocamldep
+override OCAMLOPTFLAGS += -I .
+override OCAMLFLAGS    += -I .
+REQUIRES = bigarray,num,str
+
+# Some files require special care:
+batFingerTree.cmo: batFingerTree.ml
+	$(OCAMLC)   -rectypes -package "$(REQUIRES)" $(OCAMLFLAGS) -c $<
+batFingerTree.cmx: batFingerTree.ml
+	$(OCAMLOPT) -rectypes -package "$(REQUIRES)" $(OCAMLOPTFLAGS) -c $<
+batFingerTree.odoc: batFingerTree.mli
+	$(OCAMLDOC) -rectypes -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+
+batteriesHelp.cmo: batteriesHelp.ml
+	$(OCAMLC)   -package "$(REQUIRES)" $(OCAMLFLAGS)    -I +compiler-libs -c $<
+batteriesHelp.cmx: batteriesHelp.ml
+	$(OCAMLOPT) -package "$(REQUIRES)" $(OCAMLOPTFLAGS) -I +compiler-libs -c $<
+batteriesHelp.odoc: batteriesHelp.mli
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) -I +compiler-libs $< -dump $@
+
+batMutex.cmi: batMutex.mli
+	$(OCAMLC)   -thread -package "$(REQUIRES)" $(OCAMLFLAGS)    -c $<
+batMutex.cmo: batMutex.ml
+	$(OCAMLC)   -thread -package "$(REQUIRES)" $(OCAMLFLAGS)    -c $<
+batMutex.cmx: batMutex.ml
+	$(OCAMLOPT) -thread -package "$(REQUIRES)" $(OCAMLOPTFLAGS) -c $<
+batMutex.odoc: batMutex.mli
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) -I +threads $< -dump $@
+batRMutex.cmi: batRMutex.mli
+	$(OCAMLC)   -thread -package "$(REQUIRES)" $(OCAMLFLAGS)    -c $<
+batRMutex.cmo: batRMutex.ml
+	$(OCAMLC)   -thread -package "$(REQUIRES)" $(OCAMLFLAGS)    -c $<
+batRMutex.cmx: batRMutex.ml
+	$(OCAMLOPT) -thread -package "$(REQUIRES)" $(OCAMLOPTFLAGS) -c $<
+batRMutex.odoc: batRMutex.mli
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -I +threads -dump $@
+batteriesThread.odoc: batteriesThread.ml
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -I +threads -dump $@
+
+# The bulk of the work:
+.ml.cmo:
+	$(OCAMLC) -package "$(REQUIRES)" $(OCAMLFLAGS) -c $<
+
+.mli.cmi:
+	$(OCAMLC) -package "$(REQUIRES)" $(OCAMLFLAGS) -c $<
+
+.ml.cmx:
+	$(OCAMLOPT) -package "$(REQUIRES)" $(OCAMLOPTFLAGS) -c $<
+
+# The final results:
+batteries.cma:  $(SOURCES:.ml=.cmo)
+	$(OCAMLC)   -a -package "$(REQUIRES)" $(OCAMLFLAGS)    $^ -o $@
+batteries.cmxa: $(SOURCES:.ml=.cmx)
+	$(OCAMLOPT) -a -package "$(REQUIRES)" $(OCAMLOPTFLAGS) $^ -o $@
+batteries.cmxs: batteries.cmxa
+	$(OCAMLOPT) -shared -linkall -package "$(REQUIRES)" $(OCAMLOPTFLAGS) $^ -o $@
+
+batteriesThread.cma:  batMutex.cmo batRMutex.cmo batteriesThread.cmo
+	$(OCAMLC)   -a -package "$(REQUIRES)" -thread $(OCAMLFLAGS)    $^ -o $@
+batteriesThread.cmxa: batMutex.cmx batRMutex.cmx batteriesThread.cmx
+	$(OCAMLOPT) -a -package "$(REQUIRES)" -thread $(OCAMLOPTFLAGS) $^ -o $@
+batteriesThread.cmxs: batteriesThread.cmxa
+	$(OCAMLOPT) -shared -linkall -package "$(REQUIRES)" -thread $(OCAMLOPTFLAGS) $^ -o $@
+
+
+###############################################################################
+#	Pre-Processing of Source Code
+###############################################################################
+
+prefilter: $(GENERATED_SOURCES)
+
+# Ocaml 4.00 can benefit strongly from some pre-processing to expose
+# slightly different interfaces
+.SUFFIXES: .mli .mliv .ml .mlv .mlp
+
+# Look for lines starting with ##Vx##, and delete just the tag or the
+# whole line depending whether the x matches the ocaml major version
+.mliv.mli:
+	ocaml str.cma $(top_srcdir)/build/prefilter.ml < $^ > $@
+
+.mlv.ml:
+	ocaml str.cma $(top_srcdir)/build/prefilter.ml < $^ > $@
+
+# Define variables and export them for mkconf.ml
+DOCROOT ?= /usr/share/doc/ocaml-batteries
+BROWSER_COMMAND ?= x-www-browser
+.mlp.ml:
+	DOCROOT="$(DOCROOT)" BROWSER_COMMAND="$(BROWSER_COMMAND)" \
+	ocaml str.cma $(top_srcdir)/build/mkconf.ml $< $@
+
+
+###############################################################################
+#	Documentation
+#	Note: You can not build doc concurrently with libraries, because we
+#	      lack dependancies from foo.odoc to same cmo/cmi than foo.cmo.
+#	      It would not be hard to add with an external tool such as sed, though.
+###############################################################################
+
+OCAMLDOC = ocamlfind ocamldoc
+override OCAMLDOCFLAGS += -sort -I . -hide-warnings
+
+.SUFFIXES: .odoc
+
+.mli.odoc:
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+
+# These have no mli
+# Cannot add an .ml.odoc rule since can't garanty which rule make will pick
+# for modules with both ml and mli files.
+batteriesConfig.odoc: batteriesConfig.ml
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+batteriesPrint.odoc: batteriesPrint.ml
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+batteries.odoc: batteries.ml
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+extlib.odoc: extlib.ml
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+batInnerPervasives.odoc: batInnerPervasives.ml
+	$(OCAMLDOC) -package "$(REQUIRES)" $(OCAMLDOCFLAGS) $< -dump $@
+
+MLI_FILES_ = $(wildcard *.mli) $(TEMPLATE_MLI:.mliv=.mli)
+MLI_FILES = $(sort $(MLI_FILES_)) # remove possible dups
+DOC_SOURCES = \
+	$(MLI_FILES:.mli=.odoc) \
+	batteriesConfig.odoc batteriesPrint.odoc batteries.odoc \
+	extlib.odoc batteriesThread.odoc batInnerPervasives.odoc
+
+WORK_DOCDIR = batteries.docdir
+doc: $(DOC_SOURCES)
+	$(RM) -r $(WORK_DOCDIR)/html
+	mkdir -p $(WORK_DOCDIR)/html
+	$(OCAMLDOC) -html -t 'Batteries user guide' -thread \
+		-intro $(top_srcdir)/build/intro.text -colorize-code \
+		-d $(WORK_DOCDIR)/html -package "$(REQUIRES)" $(OCAMLDOCFLAGS) \
+		$(patsubst %.odoc,-load %.odoc,$(DOC_SOURCES))
+
+man: $(DOC_SOURCES)
+	$(RM) -r $(WORK_DOCDIR)/man
+	mkdir -p $(WORK_DOCDIR)/man
+	$(OCAMLDOC) -man -d $(WORK_DOCDIR)/man -package threads.posix $(OCAMLDOCFLAGS) \
+		$(patsubst %.odoc,-load %.odoc,$(DOC_SOURCES))
+
